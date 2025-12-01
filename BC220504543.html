@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rectangle Area dApp</title>
+    <!-- Load Tailwind CSS from CDN (Fixed URL) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind and load Inter font -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': '#4f46e5',
+                        'secondary': '#10b981',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Load Inter Font (Fixed URL) -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <!-- Load Ethers.js -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.0/dist/ethers.umd.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center font-sans p-4">
+
+    <!-- Main Content Container (dApp Card) -->
+    <div class="max-w-lg w-full p-6 md:p-8 bg-white shadow-2xl rounded-xl border border-gray-200">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-extrabold text-gray-800">
+                Rectangle Area dApp
+            </h1>
+            <p class="text-gray-500 mt-2">Interact with the smart contract to calculate area.</p>
+        </header>
+
+        <!-- Connect Wallet -->
+        <div class="mb-6">
+            <button id="connectButton" class="w-full px-4 py-3 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-indigo-600 transition duration-150 ease-in-out disabled:opacity-50">
+                Connect Wallet (220504543)
+            </button>
+        </div>
+
+        <!-- Inputs and Setters -->
+        <div class="space-y-6 border-t pt-6">
+            
+            <!-- Width Input -->
+            <div class="flex items-center space-x-3">
+                <label for="widthInput" class="w-20 text-gray-600 font-medium">Width:</label>
+                <input id="widthInput" type="number" min="1" placeholder="Enter width (e.g., 5)" class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none" />
+                <button id="setWidthButton" class="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-sm hover:bg-green-600 transition disabled:opacity-50">
+                    Set (220504543)
+                </button>
+            </div>
+
+            <!-- Height Input -->
+            <div class="flex items-center space-x-3">
+                <label for="heightInput" class="w-20 text-gray-600 font-medium">Height:</label>
+                <input id="heightInput" type="number" min="1" placeholder="Enter height (e.g., 10)" class="flex-grow p-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none" />
+                <button id="setHeightButton" class="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-sm hover:bg-green-600 transition disabled:opacity-50">
+                    Set (220504543)
+                </button>
+            </div>
+        </div>
+
+        <!-- Calculate Area -->
+        <div class="mt-8 pt-4 border-t">
+            <button id="areaButton" class="w-full px-4 py-3 bg-secondary text-white font-semibold rounded-lg shadow-md hover:bg-emerald-600 transition duration-150 ease-in-out disabled:opacity-50">
+                Calculate Area (View) (220504543)
+            </button>
+        </div>
+
+        <!-- Result Display -->
+        <div class="mt-6 p-4 bg-indigo-50 rounded-lg text-center">
+            <h2 id="result" class="text-2xl font-bold text-indigo-700">Area = ?</h2>
+        </div>
+    </div>
+
+    <!-- Custom Message Box for Notifications and Errors -->
+    <div id="messageBox" class="fixed top-4 right-4 max-w-sm w-full p-4 rounded-lg shadow-xl opacity-0 transition-opacity duration-300 pointer-events-none transform translate-y-2">
+        <p id="messageText" class="font-semibold"></p>
+    </div>
+
+<script>
+// --- Contract Details (Replace with your own values) ---
+const CONTRACT_ADDRESS = "0xDadf7D7Bd50dd4248393CebdA90FfDf6d98De6A6";
+
+const ABI = [
+    { "inputs": [ { "internalType": "uint256", "name": "h", "type": "uint256" } ], "name": "setHeight", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, 
+    { "inputs": [ { "internalType": "uint256", "name": "w", "type": "uint256" } ], "name": "setWidth", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, 
+    { "inputs": [], "name": "area", "outputs": [ { "internalType": "uint256", "name": "", "type": "uint256" } ], "stateMutability": "view", "type": "function" }, 
+    { "inputs": [], "name": "getHeight", "outputs": [ { "internalType": "uint256", "name": "", "type": "uint256" } ], "stateMutability": "view", "type": "function" }, 
+    { "inputs": [], "name": "getWidth", "outputs": [ { "internalType": "uint256", "name": "", "type": "uint256" } ], "stateMutability": "view", "type": "function" } 
+];
+
+let provider;
+let signer;
+let contract;
+
+const connectButton = document.getElementById("connectButton");
+const setWidthButton = document.getElementById("setWidthButton");
+const setHeightButton = document.getElementById("setHeightButton");
+const areaButton = document.getElementById("areaButton");
+const messageBox = document.getElementById("messageBox");
+const messageText = document.getElementById("messageText");
+
+/**
+ * Replaces alert() with a custom, styled message box.
+ * @param {string} message The text to display.
+ * @param {boolean} isError If true, styles the box as an error.
+ */
+function showMessage(message, isError = false) {
+    messageText.textContent = message;
+    
+    // Reset classes
+    messageBox.classList.remove('bg-red-500', 'bg-green-500', 'bg-blue-500');
+
+    // Set colors based on type
+    if (isError) {
+        messageBox.classList.add('bg-red-500');
+    } else if (message.includes("connected")) {
+        messageBox.classList.add('bg-green-500');
+    } else {
+        messageBox.classList.add('bg-blue-500');
+    }
+
+    // Show the box
+    messageBox.classList.remove('opacity-0', 'translate-y-2');
+    messageBox.classList.add('opacity-100', 'translate-y-0');
+
+    // Hide after 4 seconds
+    setTimeout(() => {
+        messageBox.classList.remove('opacity-100', 'translate-y-0');
+        messageBox.classList.add('opacity-0', 'translate-y-2');
+    }, 4000);
+}
+
+// --- Connect Wallet ---
+connectButton.onclick = async () => {
+    connectButton.disabled = true;
+    try {
+        if (typeof window.ethereum !== "undefined") {
+            await ethereum.request({ method: "eth_requestAccounts" });
+
+            // Initialize Ethers V6 components
+            provider = new ethers.BrowserProvider(window.ethereum);
+            signer = await provider.getSigner();
+            contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+            showMessage("Wallet connected successfully!", false);
+            connectButton.textContent = "Wallet Connected (220504543)";
+            
+            // Enable setters and calculator after connection
+            setWidthButton.disabled = false;
+            setHeightButton.disabled = false;
+            areaButton.disabled = false;
+
+        } else {
+            showMessage("Please install a Web3 wallet (like MetaMask) first.", true);
+            connectButton.disabled = false;
+        }
+    } catch (e) {
+        showMessage("Connection Error: " + (e.message || e), true);
+        console.error("Connection Error:", e);
+        connectButton.disabled = false;
+    }
+};
+
+// --- Set Width ---
+setWidthButton.onclick = async () => {
+    const w = document.getElementById("widthInput").value;
+
+    if (!w || parseInt(w) <= 0) {
+        showMessage("Please enter a valid width (> 0)", true);
+        return;
+    }
+    
+    setWidthButton.disabled = true;
+    try {
+        // Using parseInt() is safer than passing the string directly for Solidity uint256 inputs
+        const tx = await contract.setWidth(parseInt(w));
+        showMessage("Transaction sent. Waiting for confirmation...", false);
+        await tx.wait();
+        showMessage(`Width set successfully to ${w}!`, false);
+    } catch (e) {
+        showMessage("Error setting width. Check console for details.", true);
+        console.error("Set Width Error:", e);
+    } finally {
+        setWidthButton.disabled = false;
+    }
+};
+
+// --- Set Height ---
+setHeightButton.onclick = async () => {
+    const h = document.getElementById("heightInput").value;
+
+    if (!h || parseInt(h) <= 0) {
+        showMessage("Please enter a valid height (> 0)", true);
+        return;
+    }
+
+    setHeightButton.disabled = true;
+    try {
+        const tx = await contract.setHeight(parseInt(h));
+        showMessage("Transaction sent. Waiting for confirmation...", false);
+        await tx.wait();
+        showMessage(`Height set successfully to ${h}!`, false);
+    } catch (e) {
+        showMessage("Error setting height. Check console for details.", true);
+        console.error("Set Height Error:", e);
+    } finally {
+        setHeightButton.disabled = false;
+    }
+};
+
+// --- Calculate Area ---
+areaButton.onclick = async () => {
+    areaButton.disabled = true;
+    try {
+        // 'area' is a view function, so we use contract.area.staticCall() for a pure read
+        const a = await contract.area.staticCall(); 
+        
+        // The result 'a' is a BigNumber (BigInt in ethers v6). We convert it to a string for display.
+        document.getElementById("result").innerText = "Area = " + a.toString();
+        showMessage("Area calculated successfully!", false);
+    } catch (e) {
+        showMessage("Error calculating area. Ensure wallet is connected.", true);
+        console.error("Area Calculation Error:", e);
+    } finally {
+        areaButton.disabled = false;
+    }
+};
+
+// Initial state: Disable buttons until wallet is connected
+setWidthButton.disabled = true;
+setHeightButton.disabled = true;
+areaButton.disabled = true;
+
+</script>
+
+</body>
+</html>
